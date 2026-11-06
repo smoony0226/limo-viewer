@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Autorace2026 · WeGo LIMO Pro 치수와 센서 배치 3D 뷰어">
+  <meta name="theme-color" content="#10141c">
+  <title>LIMO Pro 치수 뷰어</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --background: light-dark(#f5f7fa, #10141c);
+      --foreground: light-dark(#18202b, #edf2f7);
+      --card: light-dark(#ffffff, #202734);
+      --muted: light-dark(#e8edf3, #2a3443);
+      --muted-foreground: light-dark(#5c6878, #aeb9c8);
+      --border: light-dark(#cbd4df, #384557);
+      --primary: light-dark(#18202b, #edf2f7);
+      --primary-foreground: light-dark(#ffffff, #10141c);
+      --accent: light-dark(#fff0df, #49341f);
+      --accent-foreground: light-dark(#6a3a00, #ffe1bd);
+      --ring: light-dark(#d46b00, #ffae52);
+      --orange: light-dark(#df7100, #ff9d38);
+      --blue: light-dark(#2563a9, #75adf0);
+      --green: light-dark(#23815d, #6dd3a8);
+      --red: light-dark(#c93838, #ff8b8b);
+      font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--background);
+      color: var(--foreground);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: var(--background); color: var(--foreground); line-height: 1.55; }
+    main { width: min(1120px, 100%); margin: 0 auto; padding: 28px clamp(16px, 3vw, 34px) 40px; display: grid; gap: 22px; }
+    h1 { margin: 0; font-size: clamp(1.3rem, 3vw, 1.85rem); }
+    h2 { margin: 0 0 10px; font-size: 1.1rem; }
+    p { margin: 0; }
+    a { color: var(--blue); }
+    .lead { color: var(--muted-foreground); margin-top: 4px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+    .stat .k { font-size: 0.8rem; color: var(--muted-foreground); }
+    .stat .v { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stat .v small { font-size: 0.8rem; font-weight: 500; color: var(--muted-foreground); }
+    .viewer { display: grid; gap: 10px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .btn { min-height: 40px; padding: 8px 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--muted); color: var(--foreground); cursor: pointer; font: inherit; }
+    .btn:hover { background: var(--accent); color: var(--accent-foreground); }
+    .btn[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+    .btn:focus-visible, input:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+    .check { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; cursor: pointer; margin-left: 4px; }
+    .check input { width: 18px; height: 18px; accent-color: var(--orange); }
+    .stage { position: relative; height: clamp(340px, 58vh, 560px); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); touch-action: none; }
+    .stage canvas { display: block; }
+    .lbl { padding: 2px 7px; border-radius: 6px; background: var(--card); border: 1px solid var(--border); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
+    .lbl.est { border-style: dashed; color: var(--muted-foreground); }
+    .lbl.lane { color: var(--orange); border-color: var(--orange); }
+    .lbl.judge { color: var(--red); border-color: var(--red); }
+    .hint { font-size: 0.82rem; color: var(--muted-foreground); }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted-foreground); font-weight: 600; width: 38%; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 4px 0; }
+    .tag { display: inline-block; font-size: 0.75rem; padding: 0 6px; border-radius: 5px; border: 1px dashed var(--border); color: var(--muted-foreground); margin-left: 4px; }
+    .warn li::marker { color: var(--red); }
+    footer { font-size: 0.82rem; color: var(--muted-foreground); }
+    @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+  </style>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Autorace2026 · LIMO Pro 치수 뷰어</h1>
+    <p class="lead">대회 차량 WeGo LIMO Pro의 치수와 센서 배치. 위키 공식 스펙은 확정값, 점선 표시는 실측 전 추정값입니다.</p>
+  </header>
+
+  <section class="stats" aria-label="주요 치수">
+    <div class="stat"><div class="k">전장</div><div class="v">322 <small>mm</small></div></div>
+    <div class="stat"><div class="k">전폭</div><div class="v">220 <small>mm</small></div></div>
+    <div class="stat"><div class="k">전고</div><div class="v">251 <small>mm</small></div></div>
+    <div class="stat"><div class="k">축거 (앞·뒤 바퀴)</div><div class="v">200 <small>mm</small></div></div>
+    <div class="stat"><div class="k">윤거 (좌·우 바퀴)</div><div class="v">175 <small>mm</small></div></div>
+    <div class="stat"><div class="k">최저 지상고</div><div class="v">24 <small>mm</small></div></div>
+    <div class="stat"><div class="k">무게</div><div class="v">4.8 <small>kg</small></div></div>
+    <div class="stat"><div class="k">무부하 최고 속도</div><div class="v">1.0 <small>m/s</small></div></div>
+  </section>
+
+  <section class="card viewer" aria-label="3D 뷰어">
+    <div class="controls">
+      <button class="btn" data-view="iso" aria-pressed="true">사시도</button>
+      <button class="btn" data-view="front" aria-pressed="false">전면</button>
+      <button class="btn" data-view="side" aria-pressed="false">측면</button>
+      <button class="btn" data-view="top" aria-pressed="false">상단</button>
+      <label class="check"><input type="checkbox" id="t-dims" checked> 치수</label>
+      <label class="check"><input type="checkbox" id="t-lane"> 차선 (500mm)</label>
+      <label class="check"><input type="checkbox" id="t-judge"> 판정 기준점</label>
+    </div>
+    <div class="stage" id="stage"></div>
+    <p class="hint">드래그로 회전, 휠·핀치로 확대/축소. 3D 모형은 치수 확인용 단순 형상입니다.</p>
+  </section>
+
+  <section class="cols">
+    <div class="card">
+      <h2>센서 · 하드웨어</h2>
+      <table>
+        <tr><th>제어기</th><td>NVIDIA Jetson Orin Nano</td></tr>
+        <tr><th>LiDAR</th><td>EAI T-mini Pro (2D)</td></tr>
+        <tr><th>Depth Camera</th><td>DaBai Astra Stereo U3 <span class="tag">위키 표기</span><br>마운트 기울기 −30° / 0° / 30°</td></tr>
+        <tr><th>IMU</th><td>HI226</td></tr>
+        <tr><th>배터리</th><td>12V 10Ah (평균 11.1V, 최소 8.25V), 구동 약 4시간</td></tr>
+        <tr><th>구동</th><td>허브 모터 4 × 14.4W. 4WD 차동 · Ackermann · Mecanum · 트랙 모드</td></tr>
+        <tr><th>최소 회전 반경</th><td>0.4 m (Ackermann 모드)</td></tr>
+        <tr><th>최대 부하</th><td>1 kg (4WD 차동), 4 kg (Ackermann · Mecanum)</td></tr>
+        <tr><th>최대 등판각</th><td>20°</td></tr>
+        <tr><th>통신</th><td>Wi-Fi, Bluetooth 5.0</td></tr>
+        <tr><th>디스플레이</th><td>전면 1.54" OLED, 후면 7" 1024×600 터치</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>대회 기준으로 본 수치</h2>
+      <table>
+        <tr><th>차선 여유</th><td>차선 폭 500~550mm − 전폭 220mm → 좌우 각 <b>140~165mm</b></td></tr>
+        <tr><th>주차 칸 여유</th><td>칸 500×600mm − 차량 220×322mm → 폭 여유 280mm, 길이 여유 278mm</td></tr>
+        <tr><th>코너</th><td>트랙 코너 반경 R580(안쪽)~R670(바깥) vs 최소 회전 반경 400mm</td></tr>
+        <tr><th>속도</th><td>규정 권고 0.3~0.4 m/s, 서행 구간 0.2 m/s 이하 (차량 최고 1.0 m/s)</td></tr>
+        <tr><th>판정 기준</th><td>진입·정지선·시간 모두 <b>앞바퀴</b>. 앞바퀴 축은 차체 중심에서 100mm 앞</td></tr>
+        <tr><th>정지 오차</th><td>미션 1·3 정지선 ±5cm → 카메라에서 본 정지선과 앞바퀴 사이 거리 보정 필요</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>실측 · 확인 필요</h2>
+    <ul class="warn">
+      <li><b>카메라 장착 높이·위치</b>: 위키에 없음. 모형은 대략 위치</li>
+      <li><b>LiDAR 높이</b>: 공식 URDF 기준 약 116mm. URDF의 카메라 값은 실제와 맞지 않아 실측으로 확인 필요</li>
+      <li><b>앞 범퍼 ~ 앞바퀴 축 거리</b>: 앞뒤 대칭 가정 시 약 61mm</li>
+      <li><b>OS</b>: 위키 스펙은 Ubuntu 20.04 · JetPack 5.1.2, 우리 차량은 Ubuntu 22.04 · ROS 2 Humble 이미지</li>
+      <li><b>카메라 모델</b>: 위키는 DaBai Astra Stereo U3, 차량 기능 현황 문서는 Dabai DC1</li>
+      <li><b>주행 모드</b>: 우리 차량이 어떤 바퀴 모드(4WD 차동 / Ackermann)로 세팅돼 있는지</li>
+    </ul>
+  </section>
+
+  <footer>
+    출처: <a href="https://goofy-pleasure-a84.notion.site/Limo-Wiki-a6aa65b627cb40019a82d469dc5ae69d" target="_blank" rel="noopener">WeGo Robotics Limo Wiki · Limo Pro 하드웨어</a>,
+    <a href="https://github.com/agilexrobotics/limo_ros2" target="_blank" rel="noopener">agilexrobotics/limo_ros2</a> URDF (LiDAR 위치),
+    Autorace2026 규정집 (10/8).
+  </footer>
+</main>
+
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+  const mm = v => v / 1000;
+  const stage = document.getElementById('stage');
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  stage.appendChild(renderer.domElement);
+  const labels = new CSS2DRenderer();
+  Object.assign(labels.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+  stage.appendChild(labels.domElement);
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x667080, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  sun.position.set(1, 2, 1.5);
+  scene.add(sun);
+
+  const grid = new THREE.GridHelper(1.2, 24, 0x8a94a3, 0x8a94a3);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.35;
+  scene.add(grid);
+
+  // ---- vehicle (x: forward, y: up, z: left/right) ----
+  const car = new THREE.Group();
+  scene.add(car);
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0.1 });
+  const boxAt = (lx, ly, lz, x, y, z, m) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(mm(lx), mm(ly), mm(lz)), m);
+    b.position.set(mm(x), mm(y), mm(z));
+    car.add(b);
+    return b;
+  };
+  const body = mat(0x5b636f), deck = mat(0x7d8794), dark = mat(0x23272e);
+
+  // chassis between the wheels, top deck, front/rear bumpers
+  boxAt(262, 110, 128, -19, 24 + 55, 0, body);
+  boxAt(36, 60, 128, 130, 24 + 30, 0, body);
+  boxAt(250, 10, 150, -5, 139, 0, deck);
+  boxAt(14, 50, 150, 154, 60, 0, dark);
+  boxAt(14, 50, 150, -154, 60, 0, dark);
+
+  // wheels: radius 45, width 45, wheelbase 200, track 175
+  const wheelGeo = new THREE.CylinderGeometry(mm(45), mm(45), mm(45), 32);
+  wheelGeo.rotateX(Math.PI / 2);
+  const wheels = [];
+  for (const x of [100, -100]) for (const z of [87.5, -87.5]) {
+    const w = new THREE.Mesh(wheelGeo, mat(0x1b1d22));
+    w.position.set(mm(x), mm(45), mm(z));
+    car.add(w);
+    wheels.push(w);
+  }
+
+  // lidar (front, URDF height ~116mm)
+  const lidar = new THREE.Mesh(new THREE.CylinderGeometry(mm(20), mm(20), mm(30), 32), mat(0x30343b));
+  lidar.position.set(mm(128), mm(116), 0);
+  car.add(lidar);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(mm(20), mm(2), 8, 32), mat(0xd04040));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.copy(lidar.position);
+  car.add(ring);
+
+  // camera on mount (approximate)
+  boxAt(16, 70, 16, 110, 179, 0, dark);
+  const cam = boxAt(26, 28, 96, 116, 228, 0, mat(0x1c1f24));
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(mm(7), mm(7), mm(4), 20), mat(0x3a6fb0));
+  lens.rotation.z = Math.PI / 2;
+  lens.position.set(mm(130), mm(228), mm(-20));
+  car.add(lens);
+
+  // rear 7" display, tilted
+  const disp = new THREE.Group();
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(mm(8), mm(95), mm(160)), dark);
+  disp.add(panel);
+  disp.position.set(mm(-120), mm(196), 0);
+  disp.rotation.z = -0.35;
+  car.add(disp);
+
+  // ---- dimension helpers ----
+  const dims = new THREE.Group(); scene.add(dims);
+  const lane = new THREE.Group(); scene.add(lane);
+  const judge = new THREE.Group(); scene.add(judge);
+
+  const label = (text, pos, cls = '') => {
+    const el = document.createElement('div');
+    el.className = 'lbl ' + cls;
+    el.textContent = text;
+    const o = new CSS2DObject(el);
+    o.position.copy(pos);
+    return o;
+  };
+  const dimLine = (group, a, b, text, { color = 0x2563a9, cls = '', tick = 12 } = {}) => {
+    const A = new THREE.Vector3(...a.map(mm)), B = new THREE.Vector3(...b.map(mm));
+    const m = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true });
+    const g = new THREE.BufferGeometry().setFromPoints([A, B]);
+    const line = cls === 'est'
+      ? new THREE.Line(g, new THREE.LineDashedMaterial({ color, dashSize: 0.006, gapSize: 0.004, depthTest: false }))
+      : new THREE.Line(g, m);
+    line.computeLineDistances?.();
+    line.renderOrder = 10;
+    group.add(line);
+    for (const P of [A, B]) {
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(mm(3), 10, 10), new THREE.MeshBasicMaterial({ color, depthTest: false }));
+      dot.position.copy(P); dot.renderOrder = 10; group.add(dot);
+    }
+    const lb = label(text, A.clone().add(B).multiplyScalar(0.5), cls);
+    group.add(lb);
+    const d = B.clone().sub(A);
+    const axis = Math.abs(d.x) > 1e-6 ? 'x' : Math.abs(d.y) > 1e-6 ? 'y' : 'z';
+    dimItems.push({ group, axis, objs: group.children.slice(-4) });
+  };
+  const dimItems = [];
+
+  dimLine(dims, [-161, 0, 175], [161, 0, 175], '전장 322');
+  dimLine(dims, [215, 0, -110], [215, 0, 110], '전폭 220');
+  dimLine(dims, [-215, 0, -125], [-215, 251, -125], '전고 251');
+  dimLine(dims, [-100, 45, -150], [100, 45, -150], '축거 200');
+  dimLine(dims, [-200, 45, -87.5], [-200, 45, 87.5], '윤거 175');
+  dimLine(dims, [190, 0, 135], [190, 116, 135], 'LiDAR ≈116 (실측 필요)', { color: 0x8a94a3, cls: 'est' });
+  dimLine(dims, [190, 0, 175], [190, 228, 175], '카메라 높이 실측 필요', { color: 0x8a94a3, cls: 'est' });
+
+  // lane lines: 500mm lane, 50mm orange lines
+  const laneMat = new THREE.MeshBasicMaterial({ color: 0xff8a1f });
+  for (const s of [1, -1]) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(1.2, mm(1), mm(50)), laneMat);
+    l.position.set(0, mm(0.5), s * mm(250 + 25));
+    lane.add(l);
+  }
+  dimLine(lane, [-300, 1, -250], [-300, 1, 250], '차선 폭 500 (규정 500~550)', { color: 0xff8a1f, cls: 'lane' });
+  dimLine(lane, [-250, 1, 110], [-250, 1, 250], '여유 140', { color: 0xff8a1f, cls: 'lane' });
+  dimLine(lane, [-250, 1, -250], [-250, 1, -110], '여유 140', { color: 0xff8a1f, cls: 'lane' });
+
+  // judging point: front wheels
+  for (const z of [87.5, -87.5]) {
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(mm(14), mm(14), mm(2), 24), new THREE.MeshBasicMaterial({ color: 0xe03b3b }));
+    d.position.set(mm(100), mm(1), mm(z));
+    judge.add(d);
+  }
+  const judgeLbl = label('판정 기준: 앞바퀴 (중심에서 +100)', new THREE.Vector3(mm(100), mm(5), mm(150)), 'judge');
+  judgeLbl.element.style.marginTop = '34px';
+  judge.add(judgeLbl);
+  dimLine(judge, [100, 2, 0], [161, 2, 0], '≈61 (추정)', { color: 0xe03b3b, cls: 'judge' });
+
+  lane.visible = false;
+  judge.visible = false;
+
+  // ---- cameras / views ----
+  const persp = new THREE.PerspectiveCamera(38, 1, 0.01, 20);
+  const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 20);
+  const target = new THREE.Vector3(0, mm(110), 0);
+  let active = persp;
+  const controls = new OrbitControls(active, renderer.domElement);
+  controls.enableDamping = true;
+
+  const VIEWS = {
+    iso:   { cam: 'p', pos: [0.5, 0.36, 0.58] },
+    front: { cam: 'o', pos: [2, mm(110), 0] },
+    side:  { cam: 'o', pos: [0, mm(110), 2] },
+    top:   { cam: 'o', pos: [-0.0001, 2, 0] },
+  };
+  let current = 'iso';
+
+  function fitOrtho() {
+    const w = stage.clientWidth, h = stage.clientHeight, a = w / h;
+    const size = current === 'top' ? 0.82 : 0.5;
+    const half = a >= 1 ? size / 2 : size / 2 / a;
+    ortho.left = -half * a; ortho.right = half * a; ortho.top = half; ortho.bottom = -half;
+    ortho.updateProjectionMatrix();
+  }
+  function setView(name) {
+    current = name;
+    const v = VIEWS[name];
+    active = v.cam === 'p' ? persp : ortho;
+    // narrow (portrait) screens: pull the perspective camera back so the car fits horizontally
+    const k = v.cam === 'p' ? Math.max(1, 0.95 / (stage.clientWidth / stage.clientHeight)) : 1;
+    active.position.set(...v.pos.map(c => c * k));
+    if (active === ortho) { ortho.zoom = 1; fitOrtho(); }
+    controls.object = active;
+    controls.target.copy(name === 'top' ? new THREE.Vector3(0, 0, 0) : target);
+    controls.update();
+    document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  }
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+  document.getElementById('t-dims').addEventListener('change', e => { dims.visible = e.target.checked; });
+  document.getElementById('t-lane').addEventListener('change', e => { lane.visible = e.target.checked; });
+  document.getElementById('t-judge').addEventListener('change', e => { judge.visible = e.target.checked; });
+
+  // CSS2D labels inside hidden groups must hide too
+  // a dimension along the viewing axis collapses to a point, so hide it in that view
+  const HIDDEN_AXIS = { iso: null, front: 'x', side: 'z', top: 'y' };
+  const syncLabels = () => {
+    for (const g of [dims, lane, judge]) g.traverse(o => { if (o.isCSS2DObject) o.visible = g.visible; });
+    for (const it of dimItems) {
+      const ok = it.axis !== HIDDEN_AXIS[current];
+      for (const o of it.objs) o.visible = ok && (o.isCSS2DObject ? it.group.visible : true);
+    }
+  };
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h);
+    labels.setSize(w, h);
+    persp.aspect = w / h; persp.updateProjectionMatrix();
+    fitOrtho();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+  // URL options: ?view=top&lane=1&judge=1&dims=0
+  const q = new URLSearchParams(location.search);
+  const setToggle = (id, on) => { const el = document.getElementById(id); el.checked = on; el.dispatchEvent(new Event('change')); };
+  if (q.has('lane')) setToggle('t-lane', q.get('lane') === '1');
+  if (q.has('judge')) setToggle('t-judge', q.get('judge') === '1');
+  if (q.has('dims')) setToggle('t-dims', q.get('dims') === '1');
+  setView(VIEWS[q.get('view')] ? q.get('view') : 'iso');
+
+  renderer.setAnimationLoop(() => {
+    controls.update();
+    syncLabels();
+    renderer.render(scene, active);
+    labels.render(scene, active);
+  });
+</script>
+</body>
+</html>
